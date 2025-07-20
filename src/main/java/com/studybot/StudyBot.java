@@ -191,7 +191,6 @@ public class StudyBot {
 
 class SlashCommandListener extends ListenerAdapter {
 
-    @Override
     public void onSlashCommandInteraction(SlashCommandInteractionEvent event) {
         if (!isValidChannel(event)) {
             event.reply("이 채널에서는 스터디 봇 명령어를 사용할 수 없습니다.").setEphemeral(true).queue();
@@ -207,7 +206,6 @@ class SlashCommandListener extends ListenerAdapter {
         }
     }
 
-    @Override
     public void onModalInteraction(ModalInteractionEvent event) {
         if (!"record-modal".equals(event.getModalId())) {
             return;
@@ -229,7 +227,6 @@ class SlashCommandListener extends ListenerAdapter {
                 .setFooter("참여자 ID: " + user.getId())
                 .setTimestamp(event.getTimeCreated());
 
-        // FIX: 확인 메시지를 공개 메시지로 변경하고, 기록 카드와 함께 전송
         event.reply("✅ **" + user.getName() + "**님의 기록이 성공적으로 등록되었습니다!").addEmbeds(eb.build()).queue();
     }
 
