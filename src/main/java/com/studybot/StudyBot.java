@@ -1,11 +1,12 @@
 package com.studybot;
 
+import io.javalin.Javalin; // 웹 서버 기능을 위해 추가
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.Message;
-import net.dv8tion.jda.api.entities.MessageEmbed;
+import net.dv8tion.jda.api.entities.MessageHistory;
 import net.dv8tion.jda.api.entities.User;
 import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
 import net.dv8tion.jda.api.events.interaction.ModalInteractionEvent;
@@ -28,6 +29,7 @@ import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -47,7 +49,9 @@ public class StudyBot {
 
     // 메시지 검색 한도를 상수로 정의
     public static final int MESSAGE_HISTORY_LIMIT = 100;
+    // 참여도 계산 시 조회할 총 메시지 수 (100개씩 나누어 조회됨)
     public static final int PARTICIPATION_HISTORY_LIMIT = 10000;
+
 
     private JDA jda;
     private ScheduledExecutorService scheduler;
@@ -62,6 +66,12 @@ public class StudyBot {
             System.err.println("필수 환경변수(BOT_TOKEN, CHANNEL_ID)가 설정되지 않았습니다!");
             return;
         }
+
+        // ⭐️ UptimeRobot 연동을 위한 웹 서버 시작
+        Javalin app = Javalin.create().start(3000); // 3000번 포트로 서버 시작
+        app.get("/", ctx -> ctx.result("Study bot is alive!")); // 루트 URL에 접속하면 응답
+        System.out.println("🌐 웹 서버가 3000번 포트에서 시작되었습니다.");
+
 
         jda = JDABuilder.createDefault(BOT_TOKEN)
                 .enableIntents(GatewayIntent.GUILD_MEMBERS)
@@ -391,6 +401,7 @@ class SlashCommandListener extends ListenerAdapter {
         });
     }
 
+    // ⭐️ 참여도 계산 메소드 수정
     private void processParticipationRate(SlashCommandInteractionEvent event) {
         TextChannel channel = event.getChannel().asTextChannel();
         List<Member> members = channel.getGuild().loadMembers().get().stream()
@@ -398,8 +409,20 @@ class SlashCommandListener extends ListenerAdapter {
                 .sorted(Comparator.comparing(Member::getEffectiveName))
                 .collect(Collectors.toList());
 
-        Map<String, Set<LocalDate>> participationDays = channel.getHistory()
-                .retrievePast(StudyBot.PARTICIPATION_HISTORY_LIMIT).complete().stream()
+        // 메시지를 100개씩 나눠서 가져올 리스트
+        List<Message> historyMessages = new ArrayList<>();
+        MessageHistory history = channel.getHistory();
+        int pages = StudyBot.PARTICIPATION_HISTORY_LIMIT / 100;
+
+        for (int i = 0; i < pages; i++) {
+            List<Message> retrieved = history.retrievePast(100).complete();
+            historyMessages.addAll(retrieved);
+            if (retrieved.size() < 100) {
+                break; // 더 이상 가져올 메시지가 없으면 중단
+            }
+        }
+
+        Map<String, Set<LocalDate>> participationDays = historyMessages.stream()
                 .filter(m -> m.getAuthor().equals(event.getJDA().getSelfUser()) && !m.getEmbeds().isEmpty())
                 .map(m -> m.getEmbeds().get(0))
                 .filter(embed -> embed.getFooter() != null &&
