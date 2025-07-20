@@ -5,8 +5,6 @@ services:
     dockerfilePath: ./Dockerfile
     plan: free
     region: singapore  # 한국과 가장 가까운 리전
-    buildCommand: "./gradlew shadowJar"
-    startCommand: "java -jar build/libs/discord-study-bot.jar"
     envVars:
       - key: DISCORD_BOT_TOKEN
         sync: false
