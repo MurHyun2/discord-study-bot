@@ -1,3 +1,19 @@
+# 멀티 스테이지 빌드 (빌드 + 실행)
+FROM openjdk:17-jdk-slim as build
+
+WORKDIR /app
+
+# Gradle wrapper와 소스 코드 복사
+COPY gradlew .
+COPY gradle ./gradle
+COPY build.gradle .
+COPY src ./src
+
+# 실행 권한 부여 및 빌드
+RUN chmod +x ./gradlew
+RUN ./gradlew shadowJar --no-daemon
+
+# 실행 스테이지
 FROM openjdk:17-jre-slim
 
 WORKDIR /app
@@ -6,23 +22,11 @@ WORKDIR /app
 ENV TZ=Asia/Seoul
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
-COPY build/libs/discord-study-bot.jar app.jar
+# 빌드된 JAR 파일 복사
+COPY --from=build /app/build/libs/discord-study-bot.jar app.jar
 
-# 헬스체크용 포트 (Render 슬립 방지)
+# 포트 노출 (Render 요구사항)
 EXPOSE 10000
 
-# 간단한 HTTP 서버 추가 (슬립 방지용)
-RUN echo '#!/bin/bash\n\
-java -jar app.jar &\n\
-APP_PID=$!\n\
-\n\
-# 간단한 HTTP 서버 (헬스체크용)\n\
-while true; do\n\
-  echo -e "HTTP/1.1 200 OK\n\nBot is running" | nc -l -p 10000\n\
-done &\n\
-\n\
-wait $APP_PID' > start.sh
-
-RUN chmod +x start.sh
-
-CMD ["./start.sh"]
+# 봇 실행
+CMD ["java", "-jar", "app.jar"]
