@@ -1,5 +1,6 @@
 package com.studybot;
 
+import io.javalin.Javalin;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
@@ -63,7 +64,10 @@ public class StudyBot {
             return;
         }
 
-        // FIX: worker 타입이므로 Javalin 웹 서버 코드 제거
+        var port = Integer.parseInt(System.getenv().getOrDefault("PORT", "7070"));
+        Javalin app = Javalin.create().start(port);
+        app.get("/", ctx -> ctx.result("Study bot is alive!"));
+        System.out.println("🌐 웹 서버가 " + port + "번 포트에서 시작되었습니다.");
 
         jda = JDABuilder.createDefault(BOT_TOKEN)
                 .enableIntents(GatewayIntent.GUILD_MEMBERS)
@@ -177,14 +181,6 @@ public class StudyBot {
     public void shutdown() {
         if (scheduler != null && !scheduler.isShutdown()) {
             scheduler.shutdown();
-            try {
-                if (!scheduler.awaitTermination(5, TimeUnit.SECONDS)) {
-                    scheduler.shutdownNow();
-                }
-            } catch (InterruptedException e) {
-                scheduler.shutdownNow();
-                Thread.currentThread().interrupt();
-            }
         }
         if (jda != null) {
             jda.shutdown();
@@ -233,8 +229,8 @@ class SlashCommandListener extends ListenerAdapter {
                 .setFooter("참여자 ID: " + user.getId())
                 .setTimestamp(event.getTimeCreated());
 
-        event.reply("✅ 기록이 성공적으로 등록되었습니다!").setEphemeral(true).queue();
-        event.getChannel().sendMessageEmbeds(eb.build()).queue();
+        // FIX: 확인 메시지를 공개 메시지로 변경하고, 기록 카드와 함께 전송
+        event.reply("✅ **" + user.getName() + "**님의 기록이 성공적으로 등록되었습니다!").addEmbeds(eb.build()).queue();
     }
 
     private boolean isValidChannel(SlashCommandInteractionEvent event) {
@@ -393,14 +389,16 @@ class SlashCommandListener extends ListenerAdapter {
 
         List<Message> historyMessages = new ArrayList<>();
         MessageHistory history = channel.getHistory();
-        int pages = StudyBot.PARTICIPATION_HISTORY_LIMIT / 100;
+        int limit = StudyBot.PARTICIPATION_HISTORY_LIMIT;
 
-        for (int i = 0; i < pages; i++) {
-            List<Message> retrieved = history.retrievePast(100).complete();
-            historyMessages.addAll(retrieved);
-            if (retrieved.size() < 100) {
+        while (limit > 0) {
+            int amountToRetrieve = Math.min(100, limit);
+            List<Message> retrieved = history.retrievePast(amountToRetrieve).complete();
+            if (retrieved.isEmpty()) {
                 break;
             }
+            historyMessages.addAll(retrieved);
+            limit -= retrieved.size();
         }
 
         Map<String, Set<LocalDate>> participationDays = historyMessages.stream()
