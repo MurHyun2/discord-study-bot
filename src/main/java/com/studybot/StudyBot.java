@@ -1,6 +1,5 @@
 package com.studybot;
 
-import io.javalin.Javalin;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
@@ -64,10 +63,7 @@ public class StudyBot {
             return;
         }
 
-        var port = Integer.parseInt(System.getenv().getOrDefault("PORT", "7070"));
-        Javalin app = Javalin.create().start(port);
-        app.get("/", ctx -> ctx.result("Study bot is alive!"));
-        System.out.println("🌐 웹 서버가 " + port + "번 포트에서 시작되었습니다.");
+        // FIX: worker 타입이므로 Javalin 웹 서버 코드 제거
 
         jda = JDABuilder.createDefault(BOT_TOKEN)
                 .enableIntents(GatewayIntent.GUILD_MEMBERS)
@@ -181,6 +177,14 @@ public class StudyBot {
     public void shutdown() {
         if (scheduler != null && !scheduler.isShutdown()) {
             scheduler.shutdown();
+            try {
+                if (!scheduler.awaitTermination(5, TimeUnit.SECONDS)) {
+                    scheduler.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                scheduler.shutdownNow();
+                Thread.currentThread().interrupt();
+            }
         }
         if (jda != null) {
             jda.shutdown();
@@ -191,6 +195,7 @@ public class StudyBot {
 
 class SlashCommandListener extends ListenerAdapter {
 
+    @Override
     public void onSlashCommandInteraction(SlashCommandInteractionEvent event) {
         if (!isValidChannel(event)) {
             event.reply("이 채널에서는 스터디 봇 명령어를 사용할 수 없습니다.").setEphemeral(true).queue();
@@ -206,6 +211,7 @@ class SlashCommandListener extends ListenerAdapter {
         }
     }
 
+    @Override
     public void onModalInteraction(ModalInteractionEvent event) {
         if (!"record-modal".equals(event.getModalId())) {
             return;
@@ -227,7 +233,8 @@ class SlashCommandListener extends ListenerAdapter {
                 .setFooter("참여자 ID: " + user.getId())
                 .setTimestamp(event.getTimeCreated());
 
-        event.reply("✅ **" + user.getName() + "**님의 기록이 성공적으로 등록되었습니다!").addEmbeds(eb.build()).queue();
+        event.reply("✅ 기록이 성공적으로 등록되었습니다!").setEphemeral(true).queue();
+        event.getChannel().sendMessageEmbeds(eb.build()).queue();
     }
 
     private boolean isValidChannel(SlashCommandInteractionEvent event) {
@@ -386,16 +393,14 @@ class SlashCommandListener extends ListenerAdapter {
 
         List<Message> historyMessages = new ArrayList<>();
         MessageHistory history = channel.getHistory();
-        int limit = StudyBot.PARTICIPATION_HISTORY_LIMIT;
+        int pages = StudyBot.PARTICIPATION_HISTORY_LIMIT / 100;
 
-        while (limit > 0) {
-            int amountToRetrieve = Math.min(100, limit);
-            List<Message> retrieved = history.retrievePast(amountToRetrieve).complete();
-            if (retrieved.isEmpty()) {
+        for (int i = 0; i < pages; i++) {
+            List<Message> retrieved = history.retrievePast(100).complete();
+            historyMessages.addAll(retrieved);
+            if (retrieved.size() < 100) {
                 break;
             }
-            historyMessages.addAll(retrieved);
-            limit -= retrieved.size();
         }
 
         Map<String, Set<LocalDate>> participationDays = historyMessages.stream()

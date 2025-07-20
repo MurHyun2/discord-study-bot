@@ -1,11 +1,10 @@
 services:
-  - type: web
+  - type: worker
     name: discord-study-bot
     env: docker
     dockerfilePath: ./Dockerfile
     plan: free
     region: singapore
-    healthCheckPath: /
     envVars:
       - key: DISCORD_BOT_TOKEN
         sync: false
