@@ -55,7 +55,7 @@
     * **Branch:** `main`
     * **Runtime:** `Docker`
     * **Plan:** `Free`
-4.  **"Create Web Service"** 버튼을 눌러 서비스를 생성합니다.
+4.  **"Create Background Service"** 버튼을 눌러 서비스를 생성합니다.
 5.  생성된 서비스의 **Environment 탭**으로 이동하여 아래 환경 변수를 추가합니다.
     * **Key:** `DISCORD_BOT_TOKEN` / **Value:** `1단계에서 복사한 봇 토큰`
     * **Key:** `DISCORD_CHANNEL_ID` / **Value:** `봇이 활동할 스터디 채널의 ID`
