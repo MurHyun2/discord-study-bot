@@ -1,0 +1,43 @@
+plugins {
+    id 'java'
+    id 'application'
+    id 'com.github.johnrengelman.shadow' version '8.1.1'
+}
+
+group = 'com.studybot'
+version = '1.0.0'
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'net.dv8tion:JDA:5.0.0-beta.18'
+    implementation 'ch.qos.logback:logback-classic:1.4.14'
+}
+
+application {
+    mainClass = 'StudyBot'
+}
+
+shadowJar {
+    archiveFileName = 'discord-study-bot.jar'
+    mergeServiceFiles()
+}
+
+// 최신 방식으로 task 등록
+tasks.register('stage') {
+    dependsOn 'shadowJar'
+    description = 'Stage task for deployment'
+}
+
+// Gradle wrapper 업데이트 task
+tasks.register('updateWrapper', Wrapper) {
+    gradleVersion = '8.5'
+    distributionType = Wrapper.DistributionType.BIN
+}

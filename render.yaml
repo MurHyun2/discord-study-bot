@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: discord-study-bot
+    env: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    region: singapore
+    buildCommand: "./gradlew shadowJar"
+    startCommand: "java -jar build/libs/discord-study-bot.jar"
+    envVars:
+      - key: DISCORD_BOT_TOKEN
+        sync: false
+      - key: DISCORD_CHANNEL_ID
+        sync: false
+      - key: TZ
+        value: Asia/Seoul
+    healthCheckPath: /
