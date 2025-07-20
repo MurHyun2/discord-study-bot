@@ -1,6 +1,5 @@
 package com.studybot;
 
-import io.javalin.Javalin;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
@@ -9,8 +8,8 @@ import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.MessageHistory;
 import net.dv8tion.jda.api.entities.User;
 import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
-import net.dv8tion.jda.api.events.interaction.ModalInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
+import net.dv8tion.jda.api.events.interaction.ModalInteractionEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import net.dv8tion.jda.api.interactions.commands.OptionMapping;
 import net.dv8tion.jda.api.interactions.commands.OptionType;
@@ -47,11 +46,8 @@ public class StudyBot {
     public static final ZoneId KST = ZoneId.of("Asia/Seoul");
     public static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy년 MM월 dd일");
 
-    // 메시지 검색 한도를 상수로 정의
     public static final int MESSAGE_HISTORY_LIMIT = 100;
-    // 참여도 계산 시 조회할 총 메시지 수 (100개씩 나누어 조회됨)
     public static final int PARTICIPATION_HISTORY_LIMIT = 10000;
-
 
     private JDA jda;
     private ScheduledExecutorService scheduler;
@@ -67,11 +63,7 @@ public class StudyBot {
             return;
         }
 
-        // ⭐️ UptimeRobot 연동을 위한 웹 서버 시작
-        Javalin app = Javalin.create().start(3000); // 3000번 포트로 서버 시작
-        app.get("/", ctx -> ctx.result("Study bot is alive!")); // 루트 URL에 접속하면 응답
-        System.out.println("🌐 웹 서버가 3000번 포트에서 시작되었습니다.");
-
+        // FIX: worker 타입이므로 Javalin 웹 서버 코드 제거
 
         jda = JDABuilder.createDefault(BOT_TOKEN)
                 .enableIntents(GatewayIntent.GUILD_MEMBERS)
@@ -126,7 +118,6 @@ public class StudyBot {
             return;
         }
 
-        // 비동기로 처리하여 블로킹 방지
         CompletableFuture.runAsync(() -> {
             try {
                 List<Member> allMembers = studyChannel.getGuild().loadMembers().get().stream()
@@ -206,7 +197,6 @@ class SlashCommandListener extends ListenerAdapter {
 
     @Override
     public void onSlashCommandInteraction(SlashCommandInteractionEvent event) {
-        // 채널 검증을 먼저 수행
         if (!isValidChannel(event)) {
             event.reply("이 채널에서는 스터디 봇 명령어를 사용할 수 없습니다.").setEphemeral(true).queue();
             return;
@@ -230,13 +220,7 @@ class SlashCommandListener extends ListenerAdapter {
         Optional<String> contentOpt = Optional.ofNullable(event.getValue("content"))
                 .map(mapping -> mapping.getAsString());
 
-        if (contentOpt.isEmpty()) {
-            event.reply("⚠️ 입력 내용이 비어있습니다.").setEphemeral(true).queue();
-            return;
-        }
-
-        String content = contentOpt.get();
-        if (content.trim().isEmpty()) {
+        if (contentOpt.isEmpty() || contentOpt.get().trim().isEmpty()) {
             event.reply("⚠️ 공부 내용을 입력해주세요.").setEphemeral(true).queue();
             return;
         }
@@ -245,12 +229,11 @@ class SlashCommandListener extends ListenerAdapter {
         EmbedBuilder eb = new EmbedBuilder()
                 .setAuthor(user.getName(), null, user.getAvatarUrl())
                 .setColor(new Color(0x3BA55D))
-                .setDescription(content.trim())
+                .setDescription(contentOpt.get().trim())
                 .setFooter("참여자 ID: " + user.getId())
                 .setTimestamp(event.getTimeCreated());
 
         event.reply("✅ 기록이 성공적으로 등록되었습니다!").setEphemeral(true).queue();
-
         event.getChannel().sendMessageEmbeds(eb.build()).queue();
     }
 
@@ -263,7 +246,7 @@ class SlashCommandListener extends ListenerAdapter {
         TextInput contentInput = TextInput.create("content", "공부 내용", TextInputStyle.PARAGRAPH)
                 .setPlaceholder("오늘 공부한 내용을 자유롭게 기록해주세요.\n여러 줄 입력이 가능합니다.")
                 .setRequired(true)
-                .setMaxLength(1000) // 최대 길이 제한 추가
+                .setMaxLength(1000)
                 .build();
 
         Modal modal = Modal.create("record-modal", "스터디 기록 작성")
@@ -296,7 +279,6 @@ class SlashCommandListener extends ListenerAdapter {
             return;
         }
 
-        // 비동기로 처리하여 응답 속도 개선
         CompletableFuture.runAsync(() -> {
             try {
                 processDateCheck(event, dateToCheck);
@@ -391,7 +373,6 @@ class SlashCommandListener extends ListenerAdapter {
     private void calculateAndSendParticipationRate(SlashCommandInteractionEvent event) {
         event.deferReply().setEphemeral(true).queue();
 
-        // 비동기로 처리하여 응답 속도 개선
         CompletableFuture.runAsync(() -> {
             try {
                 processParticipationRate(event);
@@ -403,7 +384,6 @@ class SlashCommandListener extends ListenerAdapter {
         });
     }
 
-    // ⭐️ 참여도 계산 메소드 수정
     private void processParticipationRate(SlashCommandInteractionEvent event) {
         TextChannel channel = event.getChannel().asTextChannel();
         List<Member> members = channel.getGuild().loadMembers().get().stream()
@@ -411,7 +391,6 @@ class SlashCommandListener extends ListenerAdapter {
                 .sorted(Comparator.comparing(Member::getEffectiveName))
                 .collect(Collectors.toList());
 
-        // 메시지를 100개씩 나눠서 가져올 리스트
         List<Message> historyMessages = new ArrayList<>();
         MessageHistory history = channel.getHistory();
         int pages = StudyBot.PARTICIPATION_HISTORY_LIMIT / 100;
@@ -420,7 +399,7 @@ class SlashCommandListener extends ListenerAdapter {
             List<Message> retrieved = history.retrievePast(100).complete();
             historyMessages.addAll(retrieved);
             if (retrieved.size() < 100) {
-                break; // 더 이상 가져올 메시지가 없으면 중단
+                break;
             }
         }
 
