@@ -1,6 +1,6 @@
 package com.studybot;
 
-import io.javalin.Javalin; // 웹 서버 기능을 위해 추가
+import io.javalin.Javalin;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
@@ -30,6 +30,7 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -47,10 +48,8 @@ public class StudyBot {
     public static final ZoneId KST = ZoneId.of("Asia/Seoul");
     public static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy년 MM월 dd일");
 
-    // 메시지 검색 한도를 상수로 정의
     public static final int MESSAGE_HISTORY_LIMIT = 100;
-    // 참여도 계산 시 조회할 총 메시지 수 (100개씩 나누어 조회됨)
-    public static final int PARTICIPATION_HISTORY_LIMIT = 10000;
+    public static final int PARTICIPATION_HISTORY_LIMIT = 5000;
 
 
     private JDA jda;
@@ -67,9 +66,8 @@ public class StudyBot {
             return;
         }
 
-        // ⭐️ UptimeRobot 연동을 위한 웹 서버 시작
-        Javalin app = Javalin.create().start(3000); // 3000번 포트로 서버 시작
-        app.get("/", ctx -> ctx.result("Study bot is alive!")); // 루트 URL에 접속하면 응답
+        Javalin app = Javalin.create().start(3000);
+        app.get("/", ctx -> ctx.result("Study bot is alive!"));
         System.out.println("🌐 웹 서버가 3000번 포트에서 시작되었습니다.");
 
 
@@ -126,7 +124,6 @@ public class StudyBot {
             return;
         }
 
-        // 비동기로 처리하여 블로킹 방지
         CompletableFuture.runAsync(() -> {
             try {
                 List<Member> allMembers = studyChannel.getGuild().loadMembers().get().stream()
@@ -206,7 +203,6 @@ class SlashCommandListener extends ListenerAdapter {
 
     @Override
     public void onSlashCommandInteraction(SlashCommandInteractionEvent event) {
-        // 채널 검증을 먼저 수행
         if (!isValidChannel(event)) {
             event.reply("이 채널에서는 스터디 봇 명령어를 사용할 수 없습니다.").setEphemeral(true).queue();
             return;
@@ -261,7 +257,7 @@ class SlashCommandListener extends ListenerAdapter {
         TextInput contentInput = TextInput.create("content", "공부 내용", TextInputStyle.PARAGRAPH)
                 .setPlaceholder("오늘 공부한 내용을 자유롭게 기록해주세요.\n여러 줄 입력이 가능합니다.")
                 .setRequired(true)
-                .setMaxLength(1000) // 최대 길이 제한 추가
+                .setMaxLength(1000)
                 .build();
 
         Modal modal = Modal.create("record-modal", "스터디 기록 작성")
@@ -294,7 +290,6 @@ class SlashCommandListener extends ListenerAdapter {
             return;
         }
 
-        // 비동기로 처리하여 응답 속도 개선
         CompletableFuture.runAsync(() -> {
             try {
                 processDateCheck(event, dateToCheck);
@@ -317,6 +312,7 @@ class SlashCommandListener extends ListenerAdapter {
         }
     }
 
+    // ⭐️ 로직이 수정된 메소드
     private void processDateCheck(SlashCommandInteractionEvent event, LocalDate dateToCheck) {
         TextChannel channel = event.getChannel().asTextChannel();
         List<Member> allMembers = channel.getGuild().loadMembers().get().stream()
@@ -326,7 +322,12 @@ class SlashCommandListener extends ListenerAdapter {
         OffsetDateTime startOfDay = dateToCheck.atStartOfDay(StudyBot.KST).toOffsetDateTime();
         OffsetDateTime endOfDay = dateToCheck.atTime(LocalTime.MAX).atZone(StudyBot.KST).toOffsetDateTime();
 
-        Map<User, String> participants = channel.getHistory().retrievePast(StudyBot.MESSAGE_HISTORY_LIMIT).complete().stream()
+        // 1. 메시지를 가져온다.
+        List<Message> messages = channel.getHistory().retrievePast(StudyBot.MESSAGE_HISTORY_LIMIT).complete();
+        // 2. 리스트를 뒤집어 시간순(오래된 것 -> 최신 것)으로 만든다.
+        Collections.reverse(messages);
+
+        Map<User, String> participants = messages.stream()
                 .filter(m -> m.getAuthor().equals(event.getJDA().getSelfUser()) && !m.getEmbeds().isEmpty())
                 .filter(m -> {
                     OffsetDateTime msgTime = m.getTimeCreated();
@@ -343,7 +344,8 @@ class SlashCommandListener extends ListenerAdapter {
                             return member != null ? member.getUser() : null;
                         },
                         embed -> Optional.ofNullable(embed.getDescription()).orElse("내용 없음"),
-                        (existing, replacement) -> existing
+                        // 3. 중복된 키(사용자)가 있으면, 무조건 나중에 온 값(최신 기록)으로 덮어쓴다.
+                        (existing, replacement) -> replacement
                 ));
 
         participants.remove(null);
@@ -389,7 +391,6 @@ class SlashCommandListener extends ListenerAdapter {
     private void calculateAndSendParticipationRate(SlashCommandInteractionEvent event) {
         event.deferReply().setEphemeral(true).queue();
 
-        // 비동기로 처리하여 응답 속도 개선
         CompletableFuture.runAsync(() -> {
             try {
                 processParticipationRate(event);
@@ -401,7 +402,6 @@ class SlashCommandListener extends ListenerAdapter {
         });
     }
 
-    // ⭐️ 참여도 계산 메소드 수정
     private void processParticipationRate(SlashCommandInteractionEvent event) {
         TextChannel channel = event.getChannel().asTextChannel();
         List<Member> members = channel.getGuild().loadMembers().get().stream()
@@ -409,7 +409,6 @@ class SlashCommandListener extends ListenerAdapter {
                 .sorted(Comparator.comparing(Member::getEffectiveName))
                 .collect(Collectors.toList());
 
-        // 메시지를 100개씩 나눠서 가져올 리스트
         List<Message> historyMessages = new ArrayList<>();
         MessageHistory history = channel.getHistory();
         int pages = StudyBot.PARTICIPATION_HISTORY_LIMIT / 100;
@@ -418,7 +417,7 @@ class SlashCommandListener extends ListenerAdapter {
             List<Message> retrieved = history.retrievePast(100).complete();
             historyMessages.addAll(retrieved);
             if (retrieved.size() < 100) {
-                break; // 더 이상 가져올 메시지가 없으면 중단
+                break;
             }
         }
 
