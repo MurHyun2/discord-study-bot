@@ -1,5 +1,5 @@
 # 멀티 스테이지 빌드 (빌드 + 실행)
-FROM openjdk:17-jdk-slim as build
+FROM eclipse-temurin:17-jdk-alpine as build
 
 WORKDIR /app
 
@@ -14,13 +14,13 @@ RUN chmod +x ./gradlew
 RUN ./gradlew shadowJar --no-daemon
 
 # 실행 스테이지
-FROM openjdk:17-jre-slim
+FROM eclipse-temurin:17-jre-alpine
 
 WORKDIR /app
 
-# 타임존 설정 (KST)
+# 타임존 설정 (KST) - Alpine용
+RUN apk add --no-cache tzdata
 ENV TZ=Asia/Seoul
-RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 # 빌드된 JAR 파일 복사
 COPY --from=build /app/build/libs/discord-study-bot.jar app.jar
