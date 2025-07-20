@@ -4,12 +4,9 @@ services:
     env: docker
     dockerfilePath: ./Dockerfile
     plan: free
-    region: singapore  # 한국과 가장 가까운 리전
+    region: singapore
     envVars:
       - key: DISCORD_BOT_TOKEN
         sync: false
       - key: DISCORD_CHANNEL_ID
         sync: false
-      - key: TZ
-        value: Asia/Seoul
-    healthCheckPath: /
